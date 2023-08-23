@@ -3,3 +3,4 @@ autodiff/
 build/
 libautodiff/
 libtorch/
+goodone.pt

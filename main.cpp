@@ -59,10 +59,11 @@ dual rungeKutta(dual t, std::vector<dual> &y, const dual &u, dual h, const std::
     // L2 norm of error y-y_hat
 
     dual loss = 0.0;
-    for (int i = 0; i < 4; ++i)
-    {
-        loss += (y[i] - y_hat[i]) * (y[i] - y_hat[i]);
-    }
+    // for (int i = 0; i < 4; ++i)
+    // {
+    loss += (y[0] - y_hat[0]) * (y[0] - y_hat[0]);
+    loss += (y[2] - y_hat[2]) * (y[2] - y_hat[2]);
+    // }
 
     return loss;
 }
@@ -110,16 +111,19 @@ int main()
     auto net = std::make_shared<Net>();
     torch::optim::AdamW optimizer(net->parameters(), /*lr=*/0.0001);
 
+#if 1
     for (int j = 0; j < 10000; j++)
     {
         // reset simulation
         dual t = 0.0;
-        dual h = 0.01;
+        dual h = 0.001;
         std::vector<dual> y = {0.0, 0.0, 0.0, 0.0}; // initial conditions
+        y[0] = 0.1 * (rand() % 5 - 2);
         dual u = 0.0;
         std::array<dual, 4> y_hat = {0.0, 0.0, 0.0, 0.0}; // target state
-        int i = 0;
-        for (int i = 0; i < 1000; ++i)
+        int i;
+        double avg_loss = 0.0;
+        for (i = 0; i < 10000; ++i)
         {
             optimizer.zero_grad();
 
@@ -130,26 +134,37 @@ int main()
                 tensor[0][k + 4] = y_hat[k].val;
             torch::Tensor prediction = net->forward(tensor);
             u = prediction.item<double>() * USCALE;
+            // std::cout << "u: " << u << std::endl;
 
-            // Perform dynamics simulation with AD
             dual loss = rungeKutta(t, y, u, h, y_hat);
+            // std::cout << "loss: " << loss.val << std::endl;
+            avg_loss += loss.val;
             t += h;
+
             if (std::abs(y[0].val) > 0.5)
                 break;
 
             double dydu = derivative(rungeKutta, wrt(u), autodiff::at(t, y, u, h, y_hat));
-            // std::cout << std::fixed << std::setprecision(7) << "dydu:\t" << dydu << std::endl;
+            // std::cout << "dydu: " << dydu << std::endl;
+
+            if (std::isnan(dydu) || std::isnan(loss.val) || std::isnan(u.val))
+            {
+                exit(1);
+            }
 
             torch::Tensor gradient = torch::zeros({1, 1});
             gradient[0][0] = dydu;
             prediction.backward(gradient);
             optimizer.step();
         }
-
-        {
+        avg_loss /= i;
+        std::cout << "Steps: " << i << " Loss: " << avg_loss << std::endl;
+        if (i > 9000 && avg_loss < 0.05)
             break;
-        }
     }
+#else
+    torch::load(net, "net.pt");
+#endif
 
     // test out and print states along trajectory
     dual t = 0.0;
@@ -167,11 +182,9 @@ int main()
         torch::Tensor prediction = net->forward(tensor);
         u = prediction.item<double>() * USCALE;
 
-        // Perform dynamics simulation with AD
         rungeKutta(t, y, u, h, y_hat);
         t += h;
 
-        // print state
         std::cout << std::fixed << std::setprecision(5) << "theta:\t" << y[0].val
                   << " theta_dot:\t" << y[1].val << " x:\t" << y[2].val
                   << " x_dot:\t" << y[3].val << " input: " << u << std::endl;
