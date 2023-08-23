@@ -111,7 +111,7 @@ int main()
     auto net = std::make_shared<Net>();
     torch::optim::AdamW optimizer(net->parameters(), /*lr=*/0.0001);
 
-#if 1
+#if 0
     for (int j = 0; j < 10000; j++)
     {
         // reset simulation
@@ -162,17 +162,19 @@ int main()
         if (i > 9000 && avg_loss < 0.05)
             break;
     }
+    // save weights
+    torch::save(net, "net.pt");
 #else
     torch::load(net, "net.pt");
 #endif
 
     // test out and print states along trajectory
     dual t = 0.0;
-    dual h = 0.01;
+    dual h = 0.001;
     std::vector<dual> y = {0.0, 0.0, 0.0, 0.0}; // initial conditions
     dual u = 0.0;
     std::array<dual, 4> y_hat = {0.0, 0.0, 0.0, 0.0}; // target state
-    for (int i = 0; i < 1000; ++i)
+    for (int i = 0; i < 10000; ++i)
     {
         torch::Tensor tensor = torch::zeros({1, 8});
         for (int k = 0; k < 4; ++k)
@@ -189,9 +191,6 @@ int main()
                   << " theta_dot:\t" << y[1].val << " x:\t" << y[2].val
                   << " x_dot:\t" << y[3].val << " input: " << u << std::endl;
     }
-
-    // save weights
-    torch::save(net, "net.pt");
 
     return 0;
 }
