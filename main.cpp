@@ -74,7 +74,7 @@ struct Net : torch::nn::Module
     Net()
     {
         // Construct and register two Linear submodules.
-        fc1 = register_module("fc1", torch::nn::Linear(8, 64));
+        fc1 = register_module("fc1", torch::nn::Linear(4, 64));
         fc2 = register_module("fc2", torch::nn::Linear(64, 32));
         fc3 = register_module("fc3", torch::nn::Linear(32, 16));
         fc4 = register_module("fc4", torch::nn::Linear(16, 1));
@@ -89,7 +89,7 @@ struct Net : torch::nn::Module
     torch::Tensor forward(torch::Tensor x)
     {
         // Use one of many tensor manipulation functions.
-        x = torch::gelu(fc1->forward(x.reshape({x.size(0), 8})));
+        x = torch::gelu(fc1->forward(x.reshape({x.size(0), 4})));
         x = torch::dropout(x, /*p=*/0.5, /*train=*/is_training());
         x = torch::gelu(fc2->forward(x));
         x = torch::gelu(fc3->forward(x));
@@ -127,17 +127,13 @@ int main()
         {
             optimizer.zero_grad();
 
-            torch::Tensor tensor = torch::zeros({1, 8});
+            torch::Tensor tensor = torch::zeros({1, 4});
             for (int k = 0; k < 4; ++k)
                 tensor[0][k] = y[k].val;
-            for (int k = 0; k < 4; ++k)
-                tensor[0][k + 4] = y_hat[k].val;
             torch::Tensor prediction = net->forward(tensor);
             u = prediction.item<double>() * USCALE;
-            // std::cout << "u: " << u << std::endl;
 
             dual loss = rungeKutta(t, y, u, h, y_hat);
-            // std::cout << "loss: " << loss.val << std::endl;
             avg_loss += loss.val;
             t += h;
 
@@ -145,7 +141,6 @@ int main()
                 break;
 
             double dydu = derivative(rungeKutta, wrt(u), autodiff::at(t, y, u, h, y_hat));
-            // std::cout << "dydu: " << dydu << std::endl;
 
             if (std::isnan(dydu) || std::isnan(loss.val) || std::isnan(u.val))
             {
@@ -174,13 +169,11 @@ int main()
     std::vector<dual> y = {0.0, 0.0, 0.0, 0.0}; // initial conditions
     dual u = 0.0;
     std::array<dual, 4> y_hat = {0.0, 0.0, 0.0, 0.0}; // target state
-    for (int i = 0; i < 10000; ++i)
+    for (int i = 0; i < 20001; ++i)
     {
-        torch::Tensor tensor = torch::zeros({1, 8});
+        torch::Tensor tensor = torch::zeros({1, 4});
         for (int k = 0; k < 4; ++k)
             tensor[0][k] = y[k].val;
-        for (int k = 0; k < 4; ++k)
-            tensor[0][k + 4] = y_hat[k].val;
         torch::Tensor prediction = net->forward(tensor);
         u = prediction.item<double>() * USCALE;
 
